@@ -1,2 +1,8 @@
-# bird_covariateTranslator
-This module acts as a “translator,” converting LandR's vegetation dynamics into SCANFI-style covariates (raster layers of canopy height, closure, and biomass) that bird modules can directly consume for prediction in downstream.
+After knitting and rendering `bird_covariateTranslator.Rmd`, overwrite this file with a symlink to `bird_covariateTranslator.md`.
+
+E.g., on Linux/macOS from terminal:
+
+```bash
+cd /home/sdas/bird_NRV/modules/bird_covariateTranslator
+rm README.md && ln -s bird_covariateTranslator.md README.md
+```
