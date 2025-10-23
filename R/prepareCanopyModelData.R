@@ -45,8 +45,8 @@ prepareCanopyModelData <- function(scanfi_dir, psp_path) {
   names(height_stack)  <- paste0("y", years)
   
   # Extract values
-  val_closure <- extract(closure_stack, vect(PSP_buf), fun = mean, na.rm = TRUE)
-  val_height  <- extract(height_stack, vect(PSP_buf), fun = mean, na.rm = TRUE)
+  val_closure <- terra::extract(closure_stack, vect(PSP_buf), fun = mean, na.rm = TRUE)
+  val_height  <- terra::extract(height_stack, vect(PSP_buf), fun = mean, na.rm = TRUE)
   
   val_closure$OrigPlotID1 <- PSP_buf$OrigPlotID1
   val_height$OrigPlotID1 <- PSP_buf$OrigPlotID1
