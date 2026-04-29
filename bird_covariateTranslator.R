@@ -69,7 +69,10 @@ defineModule(sim, list(
                               "even if the user supplies other initial groupings (e.g., via the `Biomass_borealDataPrep`",
                               "module."),
     expectsInput("varmetaTable", "data.frame",
-                 desc = "Table with metadata for each variable: name, type, dynamic/static, lag, etc.")
+                 desc = "Table with metadata for each variable: name, type, dynamic/static, lag, etc."),
+    ## NEW ADDITION
+    expectsInput("climateYearRecord", "data.table",
+                 desc = "Optional table with simYear and climate_year mapping")
     )
     
   ),
@@ -91,20 +94,36 @@ doEvent.bird_covariateTranslator <- function(sim, eventTime, eventType, debug = 
     "init" = {
       sim <- InitTranslator(sim)
       #sim <- scheduleEvent(sim, time(sim), "bird_covariateTranslator", "predict")
-      sim <- scheduleEvent(sim,P(sim)$predictStartYear,"bird_covariateTranslator","buildCovariates")
+      sim <- scheduleEvent(sim,P(sim)$predictStartYear,"bird_covariateTranslator","buildCovariates", eventPriority = 6)
     },
-    
+
     "buildCovariates" = {
       sim <- PredictTranslator(sim)
       nextYear <- time(sim) + P(sim)$predictInterval
       if (nextYear <= P(sim)$predictEndYear) {
-        sim <- scheduleEvent(sim, nextYear,"bird_covariateTranslator", "buildCovariates", eventPriority = 1)
+        sim <- scheduleEvent(sim, nextYear,"bird_covariateTranslator", "buildCovariates", eventPriority = 6)
       }
     },
     
-    "save" = {
-      sim <- SaveTranslator(sim)
-    }
+    # ## new correction
+    # "buildCovariates" = {
+    #   yr <- time(sim)  # Explicit current year
+    #   message(crayon::blue(" bird_covariateTranslator: Building dynamic covariates for year: ", yr))
+    #   
+    #   sim <- PredictTranslator(sim)
+    #   
+    #   # Don't schedule again if start == end
+    #   if (P(sim)$predictStartYear != P(sim)$predictEndYear) {
+    #     nextYear <- yr + P(sim)$predictInterval
+    #     if (nextYear <= P(sim)$predictEndYear) {
+    #       sim <- scheduleEvent(sim, nextYear, "bird_covariateTranslator", "buildCovariates")
+    #     }
+    #   }
+    # },
+    
+    # "save" = {
+    #   sim <- SaveTranslator(sim)
+    # }
   )
   return(invisible(sim))
 }
@@ -114,30 +133,30 @@ doEvent.bird_covariateTranslator <- function(sim, eventTime, eventType, debug = 
 InitTranslator <- function(sim) {
   message("Initializing bird_covariateTranslator...")
   
-# Load cohort + pixelGroup (from sim or folder)
+# Load cohort + pixelGroup (from sim object or folder)
 #browser()
   if (is.null(sim$cohortData)) {
-    message("Loading cohortData from folder: ", file.path(outputPath(sim)))
+    message("Loading cohortData from folder: ", P(sim)$cohortFolder) ##file.path(outputPath(sim))
     #cohort_path <- list.files(P(sim)$cohortFolder, pattern = "cohortData.*rds$", full.names = TRUE)
-    cohort_path <- list.files(file.path(outputPath(sim)), pattern = "cohortData.*rds$", full.names = TRUE)
-    if (length(cohort_path) == 0) stop("No cohortData file found in ", file.path(outputPath(sim)))
+    cohort_path <- list.files(P(sim)$cohortFolder, pattern = "cohortData.*rds$", full.names = TRUE) #file.path(outputPath(sim)
+    if (length(cohort_path) == 0) stop("No cohortData file found in ", P(sim)$cohortFolder)
     #sim$cohortData <- readRDS(cohort_path[1])
     #sim$cohortData <- loadYearMatchedFile(P(sim)$cohortFolder, "cohortData.*rds$", time(sim), readRDS)
-    sim$cohortData <- loadYearMatchedFile(file.path(outputPath(sim)), "cohortData.*rds$", time(sim), readRDS)
+    sim$cohortData <- loadYearMatchedFile(P(sim)$cohortFolder, "cohortData.*rds$", time(sim), readRDS)
   }
   
   if (is.null(sim$pixelGroupMap)) {
-    message("Loading pixelGroupMap from folder: ", file.path(outputPath(sim)))
+    message("Loading pixelGroupMap from folder: ", P(sim)$cohortFolder)
     #pg_path <- list.files(P(sim)$pixelGroupFolder, pattern = "pixelGroup.*tif$", full.names = TRUE)
-    pg_path <- list.files(file.path(outputPath(sim)), pattern = "pixelGroup.*tif$", full.names = TRUE)
-    if (length(pg_path) == 0) stop("No pixelGroupMap raster found in ", file.path(outputPath(sim)))
+    pg_path <- list.files(P(sim)$cohortFolder, pattern = "pixelGroup.*tif$", full.names = TRUE)
+    if (length(pg_path) == 0) stop("No pixelGroupMap raster found in ", P(sim)$cohortFolder)
     #sim$pixelGroupMap <- terra::rast(pg_path[1])
     #sim$pixelGroupMap <- loadYearMatchedFile(P(sim)$pixelGroupFolder, "pixelGroupMap.*tif$", time(sim), terra::rast)
-    sim$pixelGroupMap <- loadYearMatchedFile(file.path(outputPath(sim)), "pixelGroupMap.*tif$", time(sim), terra::rast)
+    sim$pixelGroupMap <- loadYearMatchedFile(P(sim)$cohortFolder, "pixelGroupMap.*tif$", time(sim), terra::rast)
   }
   
 # prepare PSP & SCANFI data
-browser()
+#browser()
   if (!suppliedElsewhere("pspData", sim)) {
     message("Preparing PSP and SCANFI data...")
     sim$pspData <- Cache(prepareCanopyModelData,
@@ -197,22 +216,54 @@ PredictTranslator <- function(sim) {
   #                 predictStartYear, predictEndYear, predictInterval))
   yr <- time(sim)
   #message("Predicting for year: ", yr)
-  browser()
+  #browser()
   
   ## NEw ADD READ COHORT AND PIXEL GROUP MAP dynamically, may be not needed for pixel group map?
-  sim$cohortData <- loadYearMatchedFile(
-    file.path(outputPath(sim)),
-    "cohortData.*rds$",
-    yr,
-    readRDS
-  )
+  # sim$cohortData <- loadYearMatchedFile(
+  #   file.path(outputPath(sim)),
+  #   "cohortData.*rds$",
+  #   yr,
+  #   readRDS
+  # )
+  # 
+  # sim$pixelGroupMap <- loadYearMatchedFile(
+  #   file.path(outputPath(sim)),
+  #   "pixelGroupMap.*tif$",
+  #   yr,
+  #   terra::rast
+  # )
   
-  sim$pixelGroupMap <- loadYearMatchedFile(
-    file.path(outputPath(sim)),
-    "pixelGroupMap.*tif$",
-    yr,
-    terra::rast
-  )
+  ## NEW ADD 2 Start
+  #yr <- time(sim)
+  
+  if (is.null(sim$cohortData)) {
+    message("Translator: cohortData not found in simlist — loading from disk")
+    sim$cohortData <- loadYearMatchedFile(
+      file.path(outputPath(sim)),
+      "cohortData.*rds$",
+      yr,
+      readRDS
+    )
+  } else {
+    message("Translator: using cohortData supplied by LandR for year ", yr)
+  }
+  
+  if (is.null(sim$pixelGroupMap)) {
+    message("Translator: pixelGroupMap not found in sim — loading from disk")
+    sim$pixelGroupMap <- loadYearMatchedFile(
+      file.path(outputPath(sim)),
+      "pixelGroupMap.*tif$",
+      yr,
+      terra::rast
+    )
+  } else {
+    message("Translator: using pixelGroupMap supplied by LandR")
+  }
+  
+  
+  
+  ## NEW ADD 2 END
+  
   #  Predict canopy structure by year
   # for (yr in years) {
     message(bold$green(" Building dynamic covariates for year: "), bold$yellow(yr))
@@ -315,12 +366,45 @@ PredictTranslator <- function(sim) {
     #   )[[as.character(yr)]]
     
     ### NEW SINGLE YEAR FUNCTION
+    ## ALSO NEW ADDITION FOR FIRESENSE
+    
+    #browser()
+    if (!is.null(P(sim)$climateYearRecord)) {
+      rec <- P(sim)$climateYearRecord
+      val <- rec$climateYear[rec$simYear == yr]
+      if (length(val) != 1) {
+        stop("climateYearRecord invalid or missing for simYear = ", yr)
+      }
+      climate_year <- val
+    } else if (!is.null(sim$climateYear)) {
+      climate_year <- sim$climateYear
+    } else {
+      climate_year <- yr
+    }
+    
     sim$stack_list[[as.character(yr)]] <- buildRasterStackAnnual(
       outSim         = sim,
       lag_df         = sim$lag_df,
       vars_available = sim$varmetaTable,
-      prediction_year = yr
+      prediction_year = yr,
+      climate_year = climate_year
     )
+    ## new addition 2026
+    # Ensure bird_modelPredict runs immediately after translator finishes.
+    # This is required because predict may have exited early due to missing covariates.
+    # if ("bird_modelPredict" %in% modules(sim)) {
+    #   sim <- scheduleEvent(sim, time(sim), "bird_modelPredict", "predict", eventPriority = 7)
+    # }
+    # Translator → Predictor handoff (only when translator created stacks)
+    # if ("bird_modelPredict" %in% modules(sim) &&
+    #     !is.null(sim$stack_list[[as.character(time(sim))]]) &&
+    #     is.null(sim$predictedList[[as.character(time(sim))]])) {
+    #   
+    #   sim <- scheduleEvent(sim, time(sim),
+    #                        "bird_modelPredict", "predict",
+    #                        eventPriority = 7)
+    # }
+    
   # if (exists("stack_list", sim)) {
   #   message("Scheduling bird_modelPredict$predict after translator finishes…")
   #   sim <- scheduleEvent(sim, time(sim) + 1, "bird_modelPredict", "predict")
