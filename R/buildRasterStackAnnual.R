@@ -653,7 +653,7 @@
 
 
 buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_year, climate_year = NULL) {
-  
+browser()  
   # Bird-model annual climate labels -> canClimate variable names
   # Important:
   # - some bird-model variables map to the same canClimate variable
@@ -668,24 +668,75 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
     ERATavesm_1km  = "Tave_sm",  # t-1
     ERATavewt_1km  = "Tave_wt"   # t-1
   )
+  ## correction 13th may
   
-  # keep only relevant annual climate labels, not raw canClimate names
-  allowed_annual_labels <- names(annual_climate_map)
+  # # keep only relevant annual climate labels, not raw canClimate names
+  # allowed_annual_labels <- names(annual_climate_map)
+  # 
+  # vars_available <- vars_available |>
+  #   dplyr::filter(
+  #     !(Category == "Annual Climate" & !base %in% allowed_annual_labels)
+  #   )
+  # 
+  # vars_available <- vars_available |>
+  #   dplyr::distinct(base, year, full, source, .keep_all = TRUE)
+  # 
+  # covariates <- unique(vars_available$base)
   
-  vars_available <- vars_available |>
-    dplyr::filter(
-      !(Category == "Annual Climate" & !base %in% allowed_annual_labels)
-    )
+  # Make sure required columns exist for older metadata rows
+  if (!"source_var" %in% names(vars_available)) {
+    vars_available$source_var <- vars_available$base
+  }
+  if (!"bird_label" %in% names(vars_available)) {
+    vars_available$bird_label <- vars_available$base
+  }
+  if (!"canopy_label" %in% names(vars_available)) {
+    vars_available$canopy_label <- NA_character_
+  }
   
-  vars_available <- vars_available |>
-    dplyr::distinct(base, year, full, source, .keep_all = TRUE)
+  # Create bird-model ERA alias rows from canClimate annual variables.
+  # Example:
+  # source_var = "MAP" becomes bird_label = "ERAMAP_1km"
+  annual_alias_rows <- lapply(names(annual_climate_map), function(lbl) {
+    
+    src_var <- unname(annual_climate_map[[lbl]])
+    
+    vars_available |>
+      dplyr::filter(
+        Category == "Annual Climate",
+        source_var == src_var,
+        moduleSource %in% c("historicalClimateRasters", "projectedClimateRasters")
+      ) |>
+      dplyr::mutate(
+        bird_label = lbl,
+        base       = lbl
+      )
+  }) |>
+    dplyr::bind_rows()
   
-  covariates <- unique(vars_available$base)
+  # Keep non-annual rows + annual ERA alias rows.
+  # This prevents raw canClimate annual names like Tave_sm_1km or DD_0_1km
+  # from leaking into the bird prediction stack.
+  vars_available <- dplyr::bind_rows(
+    vars_available |> dplyr::filter(Category != "Annual Climate" | is.na(Category)),
+    annual_alias_rows
+  ) |>
+    dplyr::filter(!is.na(bird_label)) |>
+    dplyr::distinct(bird_label, year, full, source, .keep_all = TRUE)
+  
+  covariates <- unique(vars_available$bird_label)
+  
+  ## correciton ends 13th May
   year.out <- data.frame()
+  ## corrrection 13th maY
   
+  # for (cov in covariates) {
+  #   
+  #   vars_cov <- vars_available %>% dplyr::filter(base == cov)
+  #   if (nrow(vars_cov) == 0) next
   for (cov in covariates) {
     
-    vars_cov <- vars_available %>% dplyr::filter(base == cov)
+    vars_cov <- vars_available %>% dplyr::filter(bird_label == cov)
     if (nrow(vars_cov) == 0) next
     
     is_annual_climate <- any(vars_cov$Category == "Annual Climate", na.rm = TRUE)
@@ -698,10 +749,34 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
     # CASE 1: Climate normals remain static for now
     # --------------------------------------------------
     if (is_climate_normal) {
+      ##correction 13th May
+      
+      # year.out <- dplyr::bind_rows(
+      #   year.out,
+      #   data.frame(
+      #     base = cov,
+      #     year = NA_integer_,
+      #     predyear = target_year,
+      #     source_override = NA_character_,
+      #     full_override = NA_character_,
+      #     stringsAsFactors = FALSE
+      #   )
+      # )
+      # year.out <- dplyr::bind_rows(
+      #   year.out,
+      #   data.frame(
+      #     bird_label = cov,
+      #     year = source_year,
+      #     predyear = target_year,
+      #     source_override = use_source,
+      #     full_override = full_name,
+      #     stringsAsFactors = FALSE
+      #   )
+      # )
       year.out <- dplyr::bind_rows(
         year.out,
         data.frame(
-          base = cov,
+          bird_label = cov,
           year = NA_integer_,
           predyear = target_year,
           source_override = NA_character_,
@@ -757,11 +832,23 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
         " | source_year = ", source_year,
         " | climate_var = ", climate_var
       )
+      ## correction 13th may
       
+      # year.out <- dplyr::bind_rows(
+      #   year.out,
+      #   data.frame(
+      #     base = cov,   # keep the ERA-prefixed bird-model name
+      #     year = source_year,
+      #     predyear = target_year,
+      #     source_override = use_source,
+      #     full_override = full_name,
+      #     stringsAsFactors = FALSE
+      #   )
+      # )
       year.out <- dplyr::bind_rows(
         year.out,
         data.frame(
-          base = cov,   # keep the ERA-prefixed bird-model name
+          bird_label = cov,
           year = source_year,
           predyear = target_year,
           source_override = use_source,
@@ -769,7 +856,6 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
           stringsAsFactors = FALSE
         )
       )
-      
       next
     }
     
@@ -777,10 +863,22 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
     # CASE 3: Other fully static variables
     # --------------------------------------------------
     if (all(is.na(vars_cov$year))) {
+      #correction 13th May
+      # year.out <- dplyr::bind_rows(
+      #   year.out,
+      #   data.frame(
+      #     base = cov,
+      #     year = NA_integer_,
+      #     predyear = target_year,
+      #     source_override = NA_character_,
+      #     full_override = NA_character_,
+      #     stringsAsFactors = FALSE
+      #   )
+      # )
       year.out <- dplyr::bind_rows(
         year.out,
         data.frame(
-          base = cov,
+          bird_label = cov,
           year = NA_integer_,
           predyear = target_year,
           source_override = NA_character_,
@@ -791,13 +889,71 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
       next
     }
     
+    # # --------------------------------------------------
+    # # CASE 4: Other year-based variables
+    # # --------------------------------------------------
+    # vars_cov <- vars_cov %>% dplyr::filter(!is.na(year), year <= target_year)
+    # 
+    # if (nrow(vars_cov) == 0) {
+    #   warning("No available rasters for ", cov, " up to target year ", target_year)
+    #   next
+    # }
+    # 
+    # lag_row <- lag_df |> dplyr::filter(Label == cov)
+    # 
+    # if (nrow(lag_row) > 0) {
+    #   year_shift <- lag_row$YearMatch[1]
+    #   message("YearMatch found for ", cov, ": shift = ", year_shift)
+    # } else if (grepl("Dormancy", cov, ignore.case = TRUE) ||
+    #            grepl("Greenup", cov, ignore.case = TRUE)) {
+    #   year_shift <- 0
+    #   message("Fallback lag rule for ", cov, ": shift = 0")
+    # } else {
+    #   year_shift <- 0
+    # }
+    # 
+    # if (is.na(year_shift)) year_shift <- 0
+    # 
+    # years_cov <- sort(unique(vars_cov$year))
+    # years_cov_adj <- years_cov + year_shift
+    # 
+    # dt <- data.table::data.table(
+    #   effective_year = years_cov_adj,
+    #   raster_year = years_cov
+    # )
+    # data.table::setkey(dt, effective_year)
+    # 
+    # if (year_shift != 0) {
+    #   match_year <- dt[data.table::J(target_year)]$raster_year
+    #   if (is.na(match_year)) {
+    #     message("Missing lagged year for ", cov, " -> using nearest available raster.")
+    #     match_year <- dt[data.table::J(target_year), roll = "nearest"]$raster_year
+    #   }
+    # } else {
+    #   match_year <- dt[data.table::J(target_year), roll = "nearest"]$raster_year
+    # }
+    # 
+    # year.out <- dplyr::bind_rows(
+    #   year.out,
+    #   data.frame(
+    #     base = cov,
+    #     year = match_year,
+    #     predyear = target_year,
+    #     source_override = NA_character_,
+    #     full_override = NA_character_,
+    #     stringsAsFactors = FALSE
+    #   )
+    # )
+    
     # --------------------------------------------------
     # CASE 4: Other year-based variables
+    # Uses simulation year, not climate year.
+    # Example: SCANFI species, greenup, dormancy, LCC, roads, VLCE, CCNL.
     # --------------------------------------------------
-    vars_cov <- vars_cov %>% dplyr::filter(!is.na(year), year <= target_year)
+    vars_cov <- vars_cov %>% dplyr::filter(!is.na(year))
     
     if (nrow(vars_cov) == 0) {
-      warning("No available rasters for ", cov, " up to target year ", target_year)
+      warning("No year-based rasters found for ", cov)
       next
     }
     
@@ -821,12 +977,13 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
     
     dt <- data.table::data.table(
       effective_year = years_cov_adj,
-      raster_year = years_cov
+      raster_year    = years_cov
     )
     data.table::setkey(dt, effective_year)
     
     if (year_shift != 0) {
       match_year <- dt[data.table::J(target_year)]$raster_year
+      
       if (is.na(match_year)) {
         message("Missing lagged year for ", cov, " -> using nearest available raster.")
         match_year <- dt[data.table::J(target_year), roll = "nearest"]$raster_year
@@ -838,27 +995,36 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
     year.out <- dplyr::bind_rows(
       year.out,
       data.frame(
-        base = cov,
-        year = match_year,
-        predyear = target_year,
+        bird_label      = cov,
+        year            = match_year,
+        predyear        = target_year,
         source_override = NA_character_,
-        full_override = NA_character_,
+        full_override   = NA_character_,
         stringsAsFactors = FALSE
       )
     )
   }
-  
+  ## correction 13th May
+  # matched_rows <- dplyr::left_join(
+  #   year.out,
+  #   vars_available,
+  #   by = c("base", "year")
+  # ) |>
+  #   dplyr::mutate(
+  #     source_final = dplyr::coalesce(source_override, source),
+  #     full_final   = dplyr::coalesce(full_override, full)
+  #   ) |>
+  #   dplyr::filter(!is.na(full_final))
   matched_rows <- dplyr::left_join(
     year.out,
     vars_available,
-    by = c("base", "year")
+    by = c("bird_label", "year")
   ) |>
     dplyr::mutate(
       source_final = dplyr::coalesce(source_override, source),
       full_final   = dplyr::coalesce(full_override, full)
     ) |>
     dplyr::filter(!is.na(full_final))
-  
   prediction_year <- as.integer(prediction_year)
   effective_climate_year <- if (is.null(climate_year)) prediction_year else climate_year
   
@@ -875,7 +1041,9 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
     row <- matched_rows[i, ]
     
     message(
-      "Trying: ", row$base,
+      # Correction 13th May
+      #"Trying: ", row$base,
+      "Trying: ", row$bird_label,
       if (!is.na(row$year)) paste0(" (year = ", row$year, ")") else " (static)",
       " from ", row$source_final,
       " using layer: ", row$full_final
@@ -891,12 +1059,15 @@ buildRasterStackAnnual <- function(outSim, lag_df, vars_available, prediction_ye
         r <- r[[row$full_final]]
         
         # Critical: rename to bird-model expected name
-        names(r) <- row$base
-        
+        # correction 13th May
+        #names(r) <- row$base
+        names(r) <- row$bird_label
         r
       },
       error = function(e) {
-        message("Failed to extract ", row$base, " -> ", e$message)
+        # correction 13th may
+        #message("Failed to extract ", row$base, " -> ", e$message)
+        message("Failed to extract ", row$bird_label, " -> ", e$message)
         NULL
       }
     )
