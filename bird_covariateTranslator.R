@@ -17,7 +17,7 @@ defineModule(sim, list(
   citation = list("citation.bib"),
   documentation = list("NEWS.md", "README.md", "bird_covariateTranslator.Rmd"),
   reqdPkgs = list( "ggplot2","data.table", "terra", "sf",  "httr2", "dplyr", "RCurl", "XML", "snow", "googledrive",
-                  "PSPclean", "pemisc", #"PredictiveEcology/reproducible@AI (HEAD)", "PredictiveEcology/SpaDES.core@box (>= 2.1.5.9022)",
+                  "PSPclean", "pemisc","ranger", "caret", "xgboost", "SHAPforxgboost", #"PredictiveEcology/reproducible@AI (HEAD)", "PredictiveEcology/SpaDES.core@box (>= 2.1.5.9022)",
                   "PredictiveEcology/SpaDES.core@box"),
   parameters = bindrows(
     #defineParameter("paramName", "paramClass", value, min, max, "parameter description"),
@@ -52,7 +52,14 @@ defineModule(sim, list(
     defineParameter("scanfiDir",   "character", NA, NA, NA,
                     desc = "Path to SCANFI 5x5 dir or base folder (optional; downloader can be used inside prepareCanopyModelData)"),
     defineParameter("pspDataPath", "character", NA, NA, NA,
-                    desc = "Optional path to preprocessed PSP (RDS/CSV). If not provided, PSP will be downloaded & processed.")
+                    desc = "Optional path to preprocessed PSP (RDS/CSV). If not provided, PSP will be downloaded & processed."),
+    defineParameter("pspClimatePath", "character", NA, NA, NA,
+                    desc = "Path to PSP climate CSV used for canopy model training"),
+    defineParameter("ecoregionURL", "character", NA, NA, NA,
+                    desc = "URL or path to ecoprovince/ecoregion vector"),
+    defineParameter("covariateSourceMode", "character", "dynamic", NA, NA,
+                    desc = "Which covariate source to prefer when both observed and translator/modelled versions exist. Options: 'observed', 'dynamic', or 'hybrid'",
+                    "default is dynamic")
   ),
   inputObjects = bindrows(
     expectsInput("studyAreaRas", "SpatRaster", 
@@ -72,7 +79,9 @@ defineModule(sim, list(
                  desc = "Table with metadata for each variable: name, type, dynamic/static, lag, etc."),
     ## NEW ADDITION
     expectsInput("climateYearRecord", "data.table",
-                 desc = "Optional table with simYear and climate_year mapping")
+                 desc = "Optional table with simYear and climate_year mapping"),
+    expectsInput("ecoregionVector", "sf",
+                 desc = "Ecoprovince/ecoregion vector used for assigning ECOPROVINC in canopy model training")
     )
     
   ),
@@ -87,7 +96,7 @@ defineModule(sim, list(
                   desc = "Trained model for closure prediction")
   )
 ))
-
+#browser()
 doEvent.bird_covariateTranslator <- function(sim, eventTime, eventType, debug = FALSE) {
   switch(
     eventType,
@@ -134,9 +143,9 @@ InitTranslator <- function(sim) {
   message("Initializing bird_covariateTranslator...")
   
 # Load cohort + pixelGroup (from sim object or folder)
-#browser()
+browser()
   if (is.null(sim$cohortData)) {
-    message("Loading cohortData from folder: ", P(sim)$cohortFolder) ##file.path(outputPath(sim))
+    message(bold(cyan("Loading cohortData from folder: ")), P(sim)$cohortFolder) ##file.path(outputPath(sim))
     #cohort_path <- list.files(P(sim)$cohortFolder, pattern = "cohortData.*rds$", full.names = TRUE)
     cohort_path <- list.files(P(sim)$cohortFolder, pattern = "cohortData.*rds$", full.names = TRUE) #file.path(outputPath(sim)
     if (length(cohort_path) == 0) stop("No cohortData file found in ", P(sim)$cohortFolder)
@@ -146,7 +155,7 @@ InitTranslator <- function(sim) {
   }
   
   if (is.null(sim$pixelGroupMap)) {
-    message("Loading pixelGroupMap from folder: ", P(sim)$cohortFolder)
+    message(bold(cyan("Loading pixelGroupMap from folder: ")), P(sim)$cohortFolder)
     #pg_path <- list.files(P(sim)$pixelGroupFolder, pattern = "pixelGroup.*tif$", full.names = TRUE)
     pg_path <- list.files(P(sim)$cohortFolder, pattern = "pixelGroup.*tif$", full.names = TRUE)
     if (length(pg_path) == 0) stop("No pixelGroupMap raster found in ", P(sim)$cohortFolder)
@@ -157,30 +166,109 @@ InitTranslator <- function(sim) {
   
 # prepare PSP & SCANFI data
 #browser()
-  if (!suppliedElsewhere("pspData", sim)) {
-    message("Preparing PSP and SCANFI data...")
-    sim$pspData <- Cache(prepareCanopyModelData,
-                         scanfi_dir = P(sim)$scanfi_dir,
-                         psp_path   = P(sim)$psp_path)
-  }
-  
+  # if (!suppliedElsewhere("pspData", sim)) {
+  #   message("Preparing PSP and SCANFI data...")
+  #   # sim$pspData <- Cache(prepareCanopyModelData,
+  #   #                      scanfi_dir = P(sim)$scanfi_dir,
+  #   #                      psp_path   = P(sim)$psp_path)
+  #   sim$pspData <- prepareCanopyModelData(scanfi_dir = P(sim)$scanfi_dir,
+  #                                   climate_path = P(sim)$psp_path,
+  #                                   ecoregion_path = "inputs/Ecoprovinces/ecoprovinces.shp")
+  # }
+  # 
+  # 
+  # # Train canopy models
+  # message("Training canopy height & closure models...")
+  # trained <- Cache(trainCanopyheightModels,
+  #                  pspData = sim$pspData,
+  #                  useCV   = FALSE) #nFolds = 1
+  # sim$height_model  <- trained$height_model
+  # sim$closure_model <- trained$closure_model
 
-  # Train canopy models
-  message("Training canopy height & closure models...")
-  trained <- Cache(trainCanopyheightModels,
-                   pspData = sim$pspData,
-                   useCV   = FALSE) #nFolds = 1
-  sim$height_model  <- trained$height_model
-  sim$closure_model <- trained$closure_model
+  ## NEW ADDITION APRIL 2026
+  message(bold(cyan(("Preparing canopy model training data with updated XGBoost workflow..."))))
   
+  sim$canopyModelData <- Cache(
+    prepareCanopyModelData,
+    scanfi_dir    = P(sim)$scanfiDir,
+    psp_path      = P(sim)$pspDataPath,
+    climate_path  = P(sim)$pspClimatePath,
+    ecoregion     = sim$ecoregionVector
+  )
+  
+  sim$broadleaf_spp <- attr(sim$canopyModelData, "broadleaf_spp")
+  
+  ## Canopy model training settings.
+  ## Change these manually if RF/XGBoost tuning strategy changes.
+  nClimatePredictors <- 10
+  corrCutoff <- 0.8
+  canopyXFolds <- 5
+  
+  message("Selecting height predictors using RF...")
+  height_feat <- Cache(
+    selectCanopyPredictors_RF,
+    model_data  = sim$canopyModelData,
+    response    = "height_p90",
+    n_vars      = nClimatePredictors,
+    corr_cutoff = corrCutoff
+  )
+  
+  message("Selecting closure predictors using RF...")
+  closure_feat <- Cache(
+    selectCanopyPredictors_RF,
+    model_data  = sim$canopyModelData,
+    response    = "closure",
+    n_vars      = nClimatePredictors,
+    corr_cutoff = corrCutoff
+  )
+  
+  message("Training XGBoost height model...")
+  sim$height_xgb <- Cache(
+    trainCanopyXGB,
+    model_data = sim$canopyModelData,
+    response   = "height_p90",
+    predictors = height_feat$predictors,
+    nFolds     = canopyXFolds,
+    figDir     = file.path(outputPath(sim), "figs", "xgb_height")
+  )
+  
+  message("Training XGBoost closure model...")
+  sim$closure_xgb <- Cache(
+    trainCanopyXGB,
+    model_data = sim$canopyModelData,
+    response   = "closure",
+    predictors = closure_feat$predictors,
+    nFolds     = canopyXFolds,
+    figDir     = file.path(outputPath(sim), "figs", "xgb_closure")
+  )
+  
+  sim$canopyModels <- list(
+    height  = sim$height_xgb,
+    closure = sim$closure_xgb
+  )
 
-  # Initialize dynamic + meta table
+  ## Correction 13th may
+  
+#   # Initialize dynamic + meta table
+#   if (is.null(sim$dynamic)) sim$dynamic <- list()
+#   if (is.null(sim$varmetaTable)) sim$varmetaTable <- data.frame()
+#   
+#   return(invisible(sim))
+# }
+  # Initialize dynamic + metadata objects
   if (is.null(sim$dynamic)) sim$dynamic <- list()
   if (is.null(sim$varmetaTable)) sim$varmetaTable <- data.frame()
   
+  # Preserve original bird_dataPrep metadata once.
+  # Translator will rebuild sim$varmetaTable from this base + current dynamic metadata.
+  if (is.null(sim$varmetaTable_base)) {
+    sim$varmetaTable_base <- sim$varmetaTable
+  }
+  
+  sim$varmetaTable_dynamic <- data.frame()
+  
   return(invisible(sim))
 }
-
 
 #  Prediction Event (create dynamic rasters)
 
@@ -260,22 +348,107 @@ PredictTranslator <- function(sim) {
     message("Translator: using pixelGroupMap supplied by LandR")
   }
   
-  
+  sim$ecoprovinceRaster <- makeEcoprovinceRaster(
+    ecoregionVector = sim$ecoregionVector,
+    template        = sim$pixelGroupMap,
+    field           = "ECOPROVINC"
+  )
   
   ## NEW ADD 2 END
   
   #  Predict canopy structure by year
   # for (yr in years) {
     message(bold$green(" Building dynamic covariates for year: "), bold$yellow(yr))
-    preds <- predictClosureHeightFromCohort(
-      cohortData    = sim$cohortData,
-      pixelGroupMap = sim$pixelGroupMap,
-      height_model  = sim$height_model,
-      closure_model = sim$closure_model,
-      studyAreaRas  = sim$studyAreaRas,
-      year          = yr
-    )
+    # preds <- predictClosureHeightFromCohort(
+    #   cohortData    = sim$cohortData,
+    #   pixelGroupMap = sim$pixelGroupMap,
+    #   height_model  = sim$height_model,
+    #   closure_model = sim$closure_model,
+    #   studyAreaRas  = sim$studyAreaRas,
+    #   year          = yr
+    # )
     
+## NEW ADDITION APRIL 2026
+  canopy_predictors <- unique(unlist(
+    lapply(sim$canopyModels, function(x) x$predictors)
+  ))
+  
+  # canopy_climate_year <- yr
+  # 
+  # if (!is.null(sim$climateYear)) {
+  #   canopy_climate_year <- sim$climateYear
+  # }
+  
+  ## nEW addition for prediction using climateYear
+  browser()
+  canopy_climate_year <- yr
+  
+  if (!is.null(sim$climateYearRecord)) {
+    climate_row <- sim$climateYearRecord[
+      sim$climateYearRecord$simYear == yr, 
+    ]
+    
+    if (nrow(climate_row) == 0) {
+      stop("No climate year found in climateYearRecord for simulation year: ", yr)
+    }
+    
+    canopy_climate_year <- climate_row$climateYear[1]
+    
+  } else if (!is.null(sim$climateYear)) {
+    canopy_climate_year <- sim$climateYear
+  }
+  ## new addition ends
+  ## correction 13th May
+  # ## NEW ADD FOR UPDATING METADATA WITH CLIMATE LAYERS
+  # 
+  # ## Trying with the dynamic funciton
+  # sim$varmetaTable <- dplyr::bind_rows(
+  #   sim$varmetaTable,
+  #   extractAvailableVariables_dynamic(sim)
+  # ) |>
+  #   dplyr::distinct()
+  # ## NEW ADD ENDS
+  # 
+  # browser()
+  # # climate_stack <- buildCanopyClimateStack(
+  # #   sim = sim,
+  # #   year = canopy_climate_year,
+  # #   canopy_predictors = canopy_predictors
+  # # )
+  ## Rebuild metadata from stable bird_dataPrep base + current translator/canClimate inventory.
+  ## Do not repeatedly append to sim$varmetaTable across simulation years.
+  if (is.null(sim$varmetaTable_base)) {
+    sim$varmetaTable_base <- sim$varmetaTable
+  }
+  
+  sim$varmetaTable_dynamic <- extractAvailableVariables_dynamic(sim)
+  
+  sim$varmetaTable <- dplyr::bind_rows(
+    sim$varmetaTable_base,
+    sim$varmetaTable_dynamic
+  ) |>
+    dplyr::distinct(source, full, source_var, year, bird_label, canopy_label, .keep_all = TRUE)
+  ## NEW ADD ENDS
+  
+  ### NEW ADDITION FOR CLIMATE DATA
+  climate_stack <- buildCanopyClimateStack(
+    sim = sim,
+    year = canopy_climate_year,
+    canopy_predictors = canopy_predictors,
+    varmetaTable = sim$varmetaTable
+  )
+  ## NEW ADDITION ENDS
+  preds <- predictCanopyFromCohort(
+    cohortData         = sim$cohortData,
+    pixelGroupMap      = sim$pixelGroupMap,
+    studyAreaRas       = sim$studyAreaRas,
+    climate_stack      = climate_stack,
+    ecoprovince_raster = sim$ecoprovinceRaster,
+    canopyModels       = sim$canopyModels,
+    broadleaf_species  = sim$broadleaf_spp
+  )
+  ## new addition ends
+  
     # Biomass raster
     biomass_1km <- makeBiomassRaster(sim$cohortData, sim$pixelGroupMap)
     biomass_1km <- terra::project(biomass_1km, sim$studyAreaRas)
@@ -291,9 +464,10 @@ PredictTranslator <- function(sim) {
     # sim$dynamic[[paste0("SCANFIclosure_1km_", yr)]] <- preds$closure_1km
     # sim$dynamic[[paste0("SCANFIbiomass_1km_", yr)]] <- biomass_1km
     
-    height_ras  <- preds$SCANFIheight_1km
-    closure_ras <- preds$SCANFIclosure_1km
-    
+    # height_ras  <- preds$SCANFIheight_1km
+    # closure_ras <- preds$SCANFIclosure_1km
+    height_ras  <- preds$height
+    closure_ras <- preds$closure
     # enforce naming (safe)
     names(height_ras)  <- paste0("SCANFIheight_1km_", yr)
     names(closure_ras) <- paste0("SCANFIclosure_1km_", yr)
@@ -316,11 +490,21 @@ PredictTranslator <- function(sim) {
     #   dynamic = TRUE,
     #   stringsAsFactors = FALSE
     # )
-    sim$vars_available_dynamic <- extractAvailableVariables_dynamic(sim)
+    ## correction 13th may
+    # sim$vars_available_dynamic <- extractAvailableVariables_dynamic(sim)
+    # sim$varmetaTable <- dplyr::bind_rows(
+    #   sim$varmetaTable,
+    #   sim$vars_available_dynamic
+    # ) |> dplyr::distinct()
+    ## Rebuild metadata again after new dynamic rasters are added.
+    ## This makes SCANFIheight/closure/biomass for the current simulation year visible.
+    sim$varmetaTable_dynamic <- extractAvailableVariables_dynamic(sim)
+    
     sim$varmetaTable <- dplyr::bind_rows(
-      sim$varmetaTable,
-      sim$vars_available_dynamic
-    ) |> dplyr::distinct()
+      sim$varmetaTable_base,
+      sim$varmetaTable_dynamic
+    ) |>
+      dplyr::distinct(source, full, source_var, year, bird_label, canopy_label, .keep_all = TRUE)
     
   #}
 
@@ -369,8 +553,8 @@ PredictTranslator <- function(sim) {
     ## ALSO NEW ADDITION FOR FIRESENSE
     
     #browser()
-    if (!is.null(P(sim)$climateYearRecord)) {
-      rec <- P(sim)$climateYearRecord
+    if (!is.null(sim$climateYearRecord)) {
+      rec <- sim$climateYearRecord
       val <- rec$climateYear[rec$simYear == yr]
       if (length(val) != 1) {
         stop("climateYearRecord invalid or missing for simYear = ", yr)
@@ -382,6 +566,7 @@ PredictTranslator <- function(sim) {
       climate_year <- yr
     }
     
+    if (is.null(sim$stack_list)) sim$stack_list <- list()
     sim$stack_list[[as.character(yr)]] <- buildRasterStackAnnual(
       outSim         = sim,
       lag_df         = sim$lag_df,
@@ -488,6 +673,20 @@ Event2 <- function(sim) {
   message(currentModule(sim), ": using dataPath '", dPath, "'.")
 
   # ! ----- EDIT BELOW ----- ! #
+  if (!suppliedElsewhere("ecoregionVector", sim)) {
+    sim$ecoregionVector <- Cache(
+      prepInputs,
+      url = "https://sis.agr.gc.ca/cansis/nsdb/ecostrat/province/ecoprovince_shp.zip", #P(sim)$ecoregionURL,
+      destinationPath = dPath,
+      fun = "sf::st_read",
+      userTags = c("object:ecoregionVector")
+    )
+  }
+  
+  if (!suppliedElsewhere("climateYearRecord", sim)) {
+    sim$climateYearRecord <- readRDS("~/SpaDES_book/LandRDemo_coreVeg/future/ian/ClimateYearTable_6_1_1.rds")
+  } 
+  
 
   # ! ----- STOP EDITING ----- ! #
   return(invisible(sim))
