@@ -684,7 +684,7 @@ Event2 <- function(sim) {
   }
   
   if (!suppliedElsewhere("climateYearRecord", sim)) {
-    sim$climateYearRecord <- readRDS("~/SpaDES_book/LandRDemo_coreVeg/future/ian/ClimateYearTable_6_1_1.rds")
+    sim$climateYearRecord <- readRDS("~/SpaDES_book/LandRDemo_coreVeg/future/ian/ClimateYearTable_6_1_1.rds") ## hardcoded ClimateYearTable, ideally this would come from the simlist
   } 
   
 
