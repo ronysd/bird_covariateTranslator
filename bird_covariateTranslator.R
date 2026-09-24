@@ -55,6 +55,8 @@ defineModule(sim, list(
                     desc = "Optional path to preprocessed PSP (RDS/CSV). If not provided, PSP will be downloaded & processed."),
     defineParameter("pspClimatePath", "character", NA, NA, NA,
                     desc = "Path to PSP climate CSV used for canopy model training"),
+    defineParameter("phenologyBaselineYear","numeric",2020,NA,NA,
+                    desc = paste("Observed Greenup/Dormancy year used as the baseline predictor in the fitted phenology models.")),
     defineParameter("ecoregionURL", "character", NA, NA, NA,
                     desc = "URL or path to ecoprovince/ecoregion vector"),
     defineParameter("covariateSourceMode", "character", "dynamic", NA, NA,
@@ -81,7 +83,15 @@ defineModule(sim, list(
     expectsInput("climateYearRecord", "data.table",
                  desc = "Optional table with simYear and climate_year mapping"),
     expectsInput("ecoregionVector", "sf",
-                 desc = "Ecoprovince/ecoregion vector used for assigning ECOPROVINC in canopy model training")
+                 desc = "Ecoprovince/ecoregion vector used for assigning ECOPROVINC in canopy model training"),
+    expectsInput( "landcoverRaster", "SpatRaster",
+                 desc = "Static land-cover raster used by phenology prediction models."),
+
+    expectsInput(  "koppenRaster", "SpatRaster",
+                desc = "Static Koppen climate-class raster used by phenology prediction models."),
+
+expectsInput("elevationRaster",  "SpatRaster",
+                desc = "Static elevation raster used by phenology prediction models.")             
     )
     
   ),
