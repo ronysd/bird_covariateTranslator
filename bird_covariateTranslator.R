@@ -76,7 +76,7 @@ defineModule(sim, list(
                  desc = paste("A raster layer with `pixelGroup` IDs per pixel. Pixels are grouped" ,
                               "based on identical `ecoregionGroup`, `speciesCode`, `age` and `B` composition,",
                               "even if the user supplies other initial groupings (e.g., via the `Biomass_borealDataPrep`",
-                              "module."),
+                              "module.")),
     expectsInput("varmetaTable", "data.frame",
                  desc = "Table with metadata for each variable: name, type, dynamic/static, lag, etc."),
     ## NEW ADDITION
