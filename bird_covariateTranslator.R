@@ -95,16 +95,81 @@ expectsInput("elevationRaster",  "SpatRaster",
     )
     
   ),
-  outputObjects = bindrows(
-    createsOutput("dynamic", "list", 
-                  desc = "List of dynamically created rasters by year"),
-    createsOutput("varmetaTable", "data.frame", 
-                  desc = "Updated variable metadata table"),
-    createsOutput("height_model", "xgb.Booster", 
-                  desc = "Trained model for height prediction"),
-    createsOutput("closure_model", "xgb.Booster", 
-                  desc = "Trained model for closure prediction")
+  #outputObjects = bindrows(
+  #  createsOutput("dynamic", "list", 
+  #                desc = "List of dynamically created rasters by year"),
+  #  createsOutput("varmetaTable", "data.frame", 
+  #                desc = "Updated variable metadata table"),
+  #  createsOutput("height_model", "xgb.Booster", 
+  #                desc = "Trained model for height prediction"),
+  #  createsOutput("closure_model", "xgb.Booster", 
+  #                desc = "Trained model for closure prediction")
+  #)
+   outputObjects = bindrows(
+  createsOutput(
+    "dynamic", "list",
+    desc = paste(
+      "Named list of dynamically generated vegetation and phenology",
+      "SpatRaster layers. Names identify the covariate, spatial scale",
+      "where applicable, and year."
+    )
+  ),
+  createsOutput(
+    "varmetaTable", "data.frame",
+    desc = paste(
+      "Updated covariate inventory combining the original input metadata",
+      "with metadata for dynamically generated rasters.",
+      "Used to select covariates when assembling prediction stacks."
+    )
+  ),
+  createsOutput(
+    "stack_list", "list",
+    desc = paste(
+      "Named list of assembled covariate SpatRaster stacks for bird",
+      "prediction, indexed by simulation year as a character string.",
+      "Each stack contains the selected covariates for that prediction year."
+    )
+  ),
+  createsOutput(
+    "stack_audit", "list",
+    desc = paste(
+      "Named list of covariate-selection audit tables indexed by",
+      "simulation year as a character string.",
+      "The element 'all' contains the combined audit table."
+    )
+  ),
+  createsOutput(
+    "stack_meta", "list",
+    desc = paste(
+      "Named list of provenance records indexed by simulation year",
+      "as a character string. Each record contains simYear, climateYear,",
+      "covariateSourceMode, and builtBy."
+    )
+  ),
+  createsOutput(
+    "canopyModels", "list",
+    desc = paste(
+      "Trained canopy-model bundles with elements 'height' and 'closure'.",
+      "Each element contains the fitted XGBoost model, predictor names,",
+      "performance metrics, and model digest."
+    )
+  ),
+    createsOutput(
+  "height_xgb", "list",
+  desc = paste(
+    "Height-model bundle containing the fitted XGBoost model,",
+    "predictor names, performance metrics, and model digest."
   )
+),
+
+createsOutput(
+  "closure_xgb", "list",
+  desc = paste(
+    "Canopy-closure model bundle containing the fitted XGBoost model,",
+    "predictor names, performance metrics, and model digest."
+  )
+) 
+)          
 ))
 #browser()
 doEvent.bird_covariateTranslator <- function(sim, eventTime, eventType, debug = FALSE) {
