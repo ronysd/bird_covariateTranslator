@@ -535,6 +535,12 @@ PredictTranslator <- function(sim) {
       yr,
       terra::rast
     )
+
+    if (attr(sim$cohortData, "source_year") != attr(sim$pixelGroupMap, "source_year")) {
+      stop("cohortData/pixelGroupMap snapshot years differ: ",
+           attr(sim$cohortData, "source_year"), " vs ",
+           attr(sim$pixelGroupMap, "source_year"))
+    }  
   # }
   #   sim$cohortData <- loadYearMatchedFile(
   #     P(sim)$cohortFolder,
@@ -657,14 +663,20 @@ PredictTranslator <- function(sim) {
   )
   ## NEW ADDITION ENDS
   #browser()
-  preds <- predictCanopyFromCohort(
+  preds <- Cache(
+    predictCanopyFromCohort,
     cohortData         = sim$cohortData,
     pixelGroupMap      = sim$pixelGroupMap,
     studyAreaRas       = sim$studyAreaRas,
     climate_stack      = climate_stack,
     ecoprovince_raster = sim$ecoprovinceRaster,
     canopyModels       = sim$canopyModels,
-    broadleaf_species  = sim$broadleaf_spp
+    broadleaf_species  = sim$broadleaf_spp,
+    .functionName      = "predict_canopy_yearly",
+    omitArgs           = c("canopyModels"),
+    .cacheExtra        = list(year = yr, repID = P(sim)$repID,
+                              models = digest::digest(sim$canopyModels)),
+    userTags           = c("module:bird_covariateTranslator", paste0("year:", yr))
   )
   ## new addition ends
   ## modification May 21st
@@ -679,16 +691,20 @@ PredictTranslator <- function(sim) {
   
   if (is.null(sim$dynamic)) sim$dynamic <- list()
   
-  dynamic_scanfi <- makeDynamicSCANFIRasters(
-    cohortData    = sim$cohortData,
-    pixelGroupMap = sim$pixelGroupMap,
-    studyAreaRas  = sim$studyAreaRas,
-    sppEquiv      = sim$sppEquiv,
-    year          = yr,
-    height_1km    = preds$height,
-    closure_1km   = preds$closure,
+  dynamic_scanfi <- Cache(
+    makeDynamicSCANFIRasters,
+    cohortData         = sim$cohortData,
+    pixelGroupMap      = sim$pixelGroupMap,
+    studyAreaRas       = sim$studyAreaRas,
+    sppEquiv           = sim$sppEquiv,
+    year               = yr,
+    height_1km         = preds$height,
+    closure_1km        = preds$closure,
     modelCover         = sim$modelCover, ## sim$modelCover or NULL
-    speciesCoverMethod = "coverWeightedBiomass" ## "coverWeightedBiomass" this uses modelCover object, alternative parameter "biomassRatio", dont use modelCover 
+    speciesCoverMethod = "coverWeightedBiomass", ## alternative: "biomassRatio" (does not use modelCover)
+    .functionName      = "dynamic_scanfi_yearly",
+    .cacheExtra        = list(repID = P(sim)$repID),
+    userTags           = c("module:bird_covariateTranslator", paste0("year:", yr))
   )
   
   dynamic_scanfi <- lapply(dynamic_scanfi, function(r) {
