@@ -14,16 +14,3 @@ getYearRaster <- function(rasters, variable, year, outputName = NULL) {
   
   r
 }
-
-
-elevation <- Cache(
-  prepInputs,
-  #targetFile = "cdem-canada-dem.tif",
-  url = "https://drive.google.com/file/d/14puAtns8oTZDtvWzpQ6_FgK4MbozGZFK/edit",
-  destinationPath = "inputs/elevation/trial/",
-  fun = "terra::rast",
-  overwrite = FALSE,
-  userTags = c(
-    "object:elevationRaw", "source:NRCan-CDEM"
-  )
-)

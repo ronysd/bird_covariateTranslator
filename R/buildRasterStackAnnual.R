@@ -1293,6 +1293,7 @@
   )
   
   loaded_rasters <- list()
+  loaded_row_indices <- integer()
   
   for (i in seq_len(nrow(matched_rows))) {
     row <- matched_rows[i, ]
@@ -1329,18 +1330,41 @@
       }
     )
     
-    if (!is.null(lyr)) {
-      loaded_rasters[[length(loaded_rasters) + 1]] <- lyr
-    }
+if (!is.null(lyr)) {
+  loaded_rasters[[length(loaded_rasters) + 1]] <- lyr
+  loaded_row_indices <- c(loaded_row_indices, i)
+}
   }
   
-  if (length(loaded_rasters) == 0) {
-    warning("No rasters loaded for simulation year ", prediction_year, ". Returning NULL stack.")
-    return(NULL)
-  }
+if (length(loaded_rasters) == 0L) {
+  stop(
+    "bird_covariateTranslator: no covariate rasters could be assembled ",
+    "for simulation year ", prediction_year,
+    ". Check variable metadata, source rasters, and preceding extraction messages."
+  )
+}
   
   template_ras <- loaded_rasters[[1]]
-  
+  for (j in seq_along(loaded_rasters)) {
+  if (!terra::compareGeom(
+    template_ras,
+    loaded_rasters[[j]],
+    crs = TRUE,
+    ext = TRUE,
+    rowcol = TRUE,
+    res = TRUE,
+    stopOnError = FALSE
+  )) {
+    stop(
+      "bird_covariateTranslator: covariate '",
+      matched_rows$bird_label[[loaded_row_indices[[j]]]],
+      "' does not match the raster grid of '",
+      matched_rows$bird_label[[loaded_row_indices[[1L]]]],
+      "' for simulation year ", prediction_year,
+      ". Align the source rasters before building the stack."
+    )
+  }
+}
   method_ras <- terra::rast(template_ras)
   terra::values(method_ras) <- "PC"
   names(method_ras) <- "method"
@@ -1358,7 +1382,7 @@
     bold$yellow(prediction_year)
   )
   ## a table to document the raster sources used to build the final raster stack
-  stack_audit <- matched_rows |>
+  stack_audit <- matched_rows[loaded_row_indices, , drop = FALSE] |>
     dplyr::mutate(
       simYear = prediction_year,
       climateYear = effective_climate_year,

@@ -16,9 +16,12 @@ defineModule(sim, list(
   timeunit = "year",
   citation = list("citation.bib"),
   documentation = list("NEWS.md", "README.md", "bird_covariateTranslator.Rmd"),
-  reqdPkgs = list( "ggplot2","data.table", "terra", "sf",  "httr2", "dplyr", "RCurl", "XML", "snow", "googledrive",
-                  "PSPclean", "pemisc","ranger", "caret", "xgboost", "SHAPforxgboost" #"PredictiveEcology/reproducible@AI (HEAD)", "PredictiveEcology/SpaDES.core@box (>= 2.1.5.9022)",
-                  ),
+reqdPkgs = list(
+  "ggplot2", "data.table", "terra", "sf", "httr2", "dplyr",
+  "RCurl", "XML", "snow", "googledrive", "PSPclean", "pemisc",
+  "ranger", "caret", "xgboost", "SHAPforxgboost",
+  "reproducible", "LandR", "stringr", "crayon"
+),
   parameters = bindrows(
     #defineParameter("paramName", "paramClass", value, min, max, "parameter description"),
     defineParameter(".plots", "character", "screen", NA, NA,
@@ -59,8 +62,6 @@ defineModule(sim, list(
                     desc = "Optional path to preprocessed PSP (RDS/CSV). If not provided, PSP will be downloaded & processed."),
     defineParameter("pspClimatePath", "character", NA, NA, NA,
                     desc = "Path to PSP climate CSV used for canopy model training"),
-    defineParameter("ecoregionURL", "character", NA, NA, NA,
-                    desc = "URL or path to ecoprovince/ecoregion vector"),
     defineParameter("phenologyBaselineYear","numeric",2020, NA, NA,
                     desc = paste("Observed Greenup/Dormancy year used as the baseline predictor in the fitted phenology models.")),
     defineParameter("covariateSourceMode", "character", "dynamic", NA, NA,
@@ -72,6 +73,12 @@ defineModule(sim, list(
   inputObjects = bindrows(
     expectsInput("studyAreaRas", "SpatRaster", 
                  desc = paste("Study area raster to match output to")),
+    expectsInput("sppEquiv", "data.table",
+                 desc = paste("Species-equivalency table used to translate cohort species codes",
+                "into dynamic species-cover covariates. Requires columns LandR,",
+                "EN_generic_full, and Type. LandR identifiers must match the",
+                "speciesCode values in cohortData. Supplied by the project",
+                "or an upstream module.")),             
     expectsInput("pspData", "data.table", 
                  desc = paste("Preprocessed PSP data with stand_age, biomass, vegetation height, canopy closure etc.")),
     expectsInput("cohortData", "data.table", 
@@ -83,13 +90,30 @@ defineModule(sim, list(
                               "based on identical `ecoregionGroup`, `speciesCode`, `age` and `B` composition,",
                               "even if the user supplies other initial groupings (e.g., via the `Biomass_borealDataPrep`",
                               "module.")),
+    expectsInput("lag_df", "data.frame",
+                 desc = paste(
+                              "Covariate year-matching table supplied by bird_dataPrep or the project.",
+                              "Requires Label, identifying the bird-model covariate, and YearMatch,",
+                              "specifying the year offset used by the annual stack builder.")),
+    expectsInput("match", "list",
+                 desc = paste("Nested list of observed covariate rasters supplied by bird_dataPrep",
+                              "or the project. Includes SCANFILCC, greenupProcessed, and",
+                              "dormancyProcessed collections used for phenology baseline predictors.",
+                              "Raster locations and layer names are described in varmetaTable.")),
+    expectsInput("static", "list",
+                 desc = paste("Nested list of static covariate rasters supplied by bird_dataPrep",
+                              "or the project, such as climate normals, human footprint, wetlands,",
+                              "and topography. Raster locations and layer names are described",
+                              "in varmetaTable.")),
     expectsInput("varmetaTable", "data.frame",
                  desc = "Table with metadata for each variable: name, type, dynamic/static, lag, etc."),
     ## NEW ADDITION
     expectsInput("climateYearRecord", "data.table",
                  desc = "Optional table with simYear and climate_year mapping"),
     expectsInput("ecoregionVector", "sf",
-                 desc = "Ecoprovince/ecoregion vector used for assigning ECOPROVINC in canopy and phenology models"),
+                 desc = paste("Ecoprovince/ecoregion vector used for assigning ECOPROVINC",
+                  "in canopy and phenology models. Uses the declared default source when not supplied elsewhere."),
+                sourceURL = "https://sis.agr.gc.ca/cansis/nsdb/ecostrat/province/ecoprovince_shp.zip"),  
     expectsInput("studyArea", "SpatVector",
                  desc = "Exact study-area polygon used for masking phenology predictors"),
     expectsInput("koppenRaster", "SpatRaster",
@@ -331,7 +355,7 @@ PredictTranslator <- function(sim) {
       return(yr)
     }
     
-    rec <- data.table::as.data.table(rec)
+    rec <- data.table::copy(data.table::as.data.table(rec))
     
     if ("climate_year" %in% names(rec) && !"climateYear" %in% names(rec)) {
       data.table::setnames(rec, "climate_year", "climateYear")
@@ -900,6 +924,13 @@ PredictTranslator <- function(sim) {
       idcol = "auditYear",
       fill = TRUE
     )
+
+  ## Copilot suggested
+  # sim$stack_audit$all <- data.table::rbindlist(
+  # sim$stack_audit[names(sim$stack_audit) != "all"],
+  # idcol = "auditYear",
+  # fill = TRUE
+  # )
     
     sim$stack_meta[[as.character(yr)]] <- list(
       simYear             = yr,
@@ -1006,17 +1037,17 @@ Event2 <- function(sim) {
   message(currentModule(sim), ": using dataPath '", dPath, "'.")
 
   # ! ----- EDIT BELOW ----- ! #
-  if (!suppliedElsewhere("ecoregionVector", sim)) {
-    sim$ecoregionVector <- Cache(
-      prepInputs,
-      url = "https://sis.agr.gc.ca/cansis/nsdb/ecostrat/province/ecoprovince_shp.zip", #P(sim)$ecoregionURL,
-      destinationPath = dPath,
-      fun = "sf::st_read",
-      userTags = c("object:ecoregionVector")
-    )
-  }
+if (!suppliedElsewhere("ecoregionVector", sim)) {
+  sim$ecoregionVector <- Cache(
+    prepInputs,
+    url = extractURL("ecoregionVector", sim),
+    destinationPath = dPath,
+    fun = "sf::st_read",
+    userTags = c("object:ecoregionVector")
+  )
+}
   ## input data for phenology model prediciton
-  if (!suppliedElsewhere("koppenClassRaw", sim)) {
+  if (!suppliedElsewhere("koppenRaster", sim)) {
     sim$koppenRaster <- Cache(
       prepInputs,
       targetFile = "Beck_KG_V1_present_0p0083.tif",
@@ -1027,7 +1058,7 @@ Event2 <- function(sim) {
       fun = "terra::rast",
       overwrite = FALSE,
       userTags = c(
-        "object:koppenClassRaw", currentModule(sim), "source:Beck2018"
+        "object:koppenRaster", currentModule(sim), "source:Beck2018"
       )
     )
   }
