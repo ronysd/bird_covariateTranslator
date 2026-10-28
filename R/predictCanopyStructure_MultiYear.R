@@ -8,8 +8,7 @@ predictCanopyStructure_MultiYear <- function(
     endYear,
     interval = 5
 ) {
-  require(terra)
-  require(data.table)
+
   outSim <- list(stack_list = list())
   
   cv <- function(x) {

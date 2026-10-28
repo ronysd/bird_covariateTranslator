@@ -8,8 +8,7 @@ prepareCanopyPredictors <- function(
     required_predictors,
     broadleaf_species
 ) {
-  library(data.table)
-  library(terra)
+
   
   cohort_dt <- as.data.table(cohortData)
   
@@ -71,43 +70,7 @@ prepareCanopyPredictors <- function(
     fun = "modal",
     na.rm = TRUE
   )
-  
-  ## correction 13th may
-  # eco_dt <- as.data.table(eco_vals)
-  # setnames(eco_dt, names(eco_dt)[1], "pixelGroup")
-  # setnames(eco_dt, names(eco_dt)[2], "ECOPROVINC")
-  # 
-  # # map back to labels
-  # lev <- levels(ecoprovince_raster)[[1]]
-  # 
-  # eco_dt[, ECOPROVINC := lev$ECOPROVINC[ #ECOPROVINC
-  #   match(ECOPROVINC, lev$ECOPROVINC) #ECOPROVINC, lev$ID
-  # ]]
-  # 
-  # pred_dt <- Reduce(
-  #   function(x, y) merge(x, y, by = "pixelGroup", all.x = TRUE),
-  #   list(cohort_sum, clim_dt, eco_dt)
-  # )
-  # # convert ecoprovince to factor
-  # pred_dt$ECOPROVINC <- as.factor(pred_dt$ECOPROVINC) #ECOPROVINC
-  # 
-  # # create dummy variables ONLY for ecoprovince
-  # eco_mm <- model.matrix(~ ECOPROVINC + 0, data = pred_dt) #ECOPROVINC
-  # eco_dt <- as.data.table(eco_mm)
-  # 
-  # ## add training ecoprovinces (as Zero / 0), if they are not present in the study area
-  # eco_preds <- required_predictors[grepl("^ECOPROVINC", required_predictors)] #ECOPROVINC
-  # 
-  # for (p in eco_preds) {
-  #   if (!p %in% names(eco_dt)) {
-  #     eco_dt[, (p) := 0]
-  #   }
-  # }
-  # 
-  # pred_dt[, ECOPROVINC := NULL] #ECOPROVINC
-  # 
-  # # append dummy variables
-  # pred_dt <- cbind(pred_dt, eco_dt)
+
   
   eco_dt <- as.data.table(eco_vals)
   setnames(eco_dt, names(eco_dt)[1], "pixelGroup")

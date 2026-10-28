@@ -1,18 +1,3 @@
-# makeBiomassRaster <- function(cohortData, pixelGroupMap) {
-#   require(data.table)
-#   require(terra)
-#   
-#   biomass_dt <- cohortData[, .(B_MgHa = sum(B, na.rm = TRUE) / 100), by = pixelGroup]
-#   
-#   pixelIndex <- as.data.table(terra::as.data.frame(pixelGroupMap, cells = TRUE))
-#   pixelIndex <- biomass_dt[pixelIndex, on = "pixelGroup"]
-#   
-#   AGB <- rast(pixelGroupMap)
-#   AGB[pixelIndex$cell] <- pixelIndex$B_MgHa
-#   
-#   return(AGB)
-# }
-
 
 
 ## NEW FUNCTION with all the dynamic variables so far
@@ -27,26 +12,12 @@ makeDynamicSCANFIRasters <- function(
     modelCover = NULL,
     speciesCoverMethod = "biomassRatio"
 ) {
-  require(data.table)
-  require(terra)
   #browser()
   cohort_dt <- data.table::as.data.table(cohortData)
   spp_dt    <- data.table::as.data.table(sppEquiv)
   
   cohort_dt[, speciesCode_chr := as.character(speciesCode)]
   
-  # spp_lookup <- spp_dt[, .(
-  #   speciesCode_chr = as.character(LandR),
-  #   EN_generic_full,
-  #   Type
-  # )]
-  # browser()
-  # cohort_spp <- merge(
-  #   cohort_dt,
-  #   spp_lookup,
-  #   by = "speciesCode_chr",
-  #   all.x = TRUE
-  # )
   spp_lookup <- spp_dt[, .(
     speciesCode_chr = as.character(LandR),
     EN_generic_full,
@@ -190,12 +161,7 @@ makeDynamicSCANFIRasters <- function(
     "Eastern white pine" = "SCANFIWhiteRedPine",
     "Western white pine" = "SCANFIWhiteRedPine"
   )
-  
-  # species_dt <- cohort_spp[
-  #   EN_generic_full %in% names(species_name_map),
-  #   .(species_B = sum(B, na.rm = TRUE)),
-  #   by = .(pixelGroup, EN_generic_full)
-  # ]
+
   species_dt <- cohort_spp[
     EN_generic_full %in% names(species_name_map),
     .(species_B = sum(cover_weight, na.rm = TRUE)),
@@ -209,13 +175,7 @@ makeDynamicSCANFIRasters <- function(
     .(species_B = sum(species_B, na.rm = TRUE)),
     by = .(pixelGroup, scanfi_name)
   ]
-  
-  # species_dt <- merge(species_dt, total_dt, by = "pixelGroup", all.x = TRUE)
-  # species_dt[, species_pct := data.table::fifelse(
-  #   total_B > 0,
-  #   species_B / total_B * 100,
-  #   0
-  # )]
+
   total_cover_dt <- cohort_spp[, .(
     total_cover_weight = sum(cover_weight, na.rm = TRUE)
   ), by = pixelGroup]

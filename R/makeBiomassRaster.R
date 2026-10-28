@@ -1,6 +1,4 @@
 makeBiomassRaster <- function(cohortData, pixelGroupMap) {
-  require(data.table)
-  require(terra)
   
   biomass_dt <- cohortData[, .(B_MgHa = sum(B, na.rm = TRUE) / 100), by = pixelGroup]
   

@@ -1,59 +1,3 @@
-# buildCanopyClimateStack <- function(
-#     sim,
-#     year,
-#     canopy_predictors
-# ) {
-#   library(terra)
-#   
-#   # select correct climate source
-#   climate_src <- getClimateRasterSource(sim, year)
-#   browser()
-#   # drop non-climate predictors
-#   # climate_vars <- setdiff(
-#   #   canopy_predictors,
-#   #   c("stand_age", "biomass", "broadleaf_prop", "ECOPROVINC")
-#   # )
-#   
-#   climate_vars <- canopy_predictors[
-#     !grepl("^ECOPROVINC", canopy_predictors) & #ECOPROVINC
-#       !canopy_predictors %in% c("stand_age", "biomass", "broadleaf_prop")
-#   ]
-#   
-#   rasters <- list()
-#   yr_name <- paste0("year", year)
-#   
-#   for (v in climate_vars) {
-#     
-#     # map model name -> climate object name
-#     v_norm <- gsub("_", "", v)  # DD_0 -> DD0, Tave_wt -> Tavewt
-#     
-#     if (!v_norm %in% names(climate_src)) {
-#       stop("Climate variable not found: ", v,
-#            " (normalized as ", v_norm, ")")
-#     }
-#     
-#     if (!yr_name %in% names(climate_src[[v_norm]])) {
-#       stop("Year ", year, " not available for climate variable ", v)
-#     }
-#     
-#     r <- climate_src[[v_norm]][[yr_name]]
-#     names(r) <- v   # critical: rename to model predictor name
-#     rasters[[v]] <- r
-#   }
-#   
-#   clim_stack <- rast(rasters)
-#   
-#   # validation
-#   stopifnot(
-#     identical(
-#       sort(names(clim_stack)),
-#       sort(climate_vars)
-#     )
-#   )
-#   
-#   return(clim_stack)
-# }
-
 
 
 ### NEW FUNCTION MAY 2026
@@ -63,8 +7,6 @@ buildCanopyClimateStack <- function(
     canopy_predictors,
     varmetaTable
 ) {
-  library(terra)
-  library(dplyr)
 #browser()  
   climate_vars <- canopy_predictors[
     !grepl("^ECOPROVINC", canopy_predictors) &

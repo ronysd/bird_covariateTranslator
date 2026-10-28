@@ -1,6 +1,4 @@
 makeEcoprovinceRaster <- function(ecoregionVector, template, field = "ECOPROVINC") {
-  library(sf)
-  library(terra)
   
   eco <- sf::st_transform(ecoregionVector, terra::crs(template))
   eco[[field]] <- as.factor(eco[[field]])

@@ -11,8 +11,6 @@ predictCanopyFromCohort <- function(
     canopyModels,
     broadleaf_species
 ) {
-  library(terra)
-  library(data.table)
   
   all_predictors <- unique(unlist(
     lapply(canopyModels, function(x) x$predictors)
@@ -44,16 +42,10 @@ predictCanopyFromCohort <- function(
     ok <- complete.cases(X)
     
     preds <- rep(NA_real_, nrow(pred_dt))
-    #browser()
-    ## correction 13th May
-    # preds[ok] <- predict(
-    #   model_obj$model,
-    #   as.matrix(X[ok])
-    # )
+
     X_ok <- X[ok, , drop = FALSE]
     
     # # enforce predictor order from your wrapper object, not from model$feature_names
-    # X_ok <- X_ok[, model_obj$predictors, drop = FALSE]
     
     X_ok <- as.data.frame(X_ok)
     X_ok[] <- lapply(X_ok, as.numeric)

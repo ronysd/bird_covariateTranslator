@@ -9,9 +9,7 @@ trainCanopyXGB <- function(
   
   stopifnot(response %in% names(model_data))
   stopifnot(all(predictors %in% names(model_data)))
-  
-  library(data.table)
-  library(reproducible)
+
   
   set.seed(seed)
   
