@@ -198,7 +198,7 @@ runXGBOOST <- function(dat, dig, nFolds = 5, colnamesResp = "height_p90", eval_m
   dat_noID <- dat_noID[, ..colOrder]
   dig <- .robustDigest(dat_noID)
   
-  browser()
+  #browser()
   #### for spatial k mean clustering
   coords <- dat[, .(X, Y)]  # or X, Y projected coords
 

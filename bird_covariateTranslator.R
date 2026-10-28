@@ -201,7 +201,7 @@ doEvent.bird_covariateTranslator <- function(sim, eventTime, eventType, debug = 
 
 InitTranslator <- function(sim) {
   message("Initializing bird_covariateTranslator...")
-  browser()
+  #browser()
  
 # Load cohort + pixelGroup (from sim object or folder)
 #browser()
@@ -415,7 +415,7 @@ PredictTranslator <- function(sim) {
   if (is.null(sim$phenologyStatic)) {
     
     message("Translator: preparing phenology static/reference predictors...")
-    browser()
+    #browser()
     baselineYear <- P(sim)$phenologyBaselineYear
     
     
@@ -485,7 +485,7 @@ PredictTranslator <- function(sim) {
     ## Prepare all static/reference
     ## phenology predictors
     ## ----------------------------
-    browser()
+    #browser()
     sim$phenologyStatic <- preparePhenologyStaticPredictors(
       rasterToMatch    = sim$studyAreaRas,
       #studyArea        = sim$studyArea,
@@ -734,7 +734,7 @@ PredictTranslator <- function(sim) {
   
   #### Dormancy climate date for prediction
   phenology_climate_year <- getClimateYearForSimYear(sim,yr)
-  browser()
+  #browser()
   phenologyClimate <- buildPhenologyClimateStack(
     sim           = sim,
     climateYear   = phenology_climate_year,
@@ -777,7 +777,7 @@ PredictTranslator <- function(sim) {
     type = "dormancy",
     climateYear = phenology_climate_year
   )
-  browser()
+  #browser()
   
   ## store model derived greenup dormancy
   sim$dynamic[[names(greenup_predicted)]] <- greenup_predicted
