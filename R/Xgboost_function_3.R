@@ -413,12 +413,21 @@ runXGBOOST <- function(dat, dig, nFolds = 5, colnamesResp = "height_p90", eval_m
           
           ## Feature selection -- remove features (variables) with low SHAP values
           ## based on a quantile threshold
-          shap_values <- shap.values(modOut, datPreds) |>
-            Cache(omitArgs = formalArgs(shap.values),
-                  .functionName = .functionNameHelper("shap.values", "xgboost", kFold),
-                  .cacheExtra = c(dig, dig2, cols2keep))
-          meanSHAP <- shap_values$mean_shap_score
+          #browser()
+          # shap_values <- shap.values(modOut, datPreds) |>
+          #   Cache(omitArgs = formalArgs(shap.values),
+          #         .functionName = .functionNameHelper("shap.values", "xgboost", kFold),
+          #         .cacheExtra = c(dig, dig2, cols2keep))
+          # meanSHAP <- shap_values$mean_shap_score
+          shap_raw <- predict(modOut, as.matrix(datPreds), type = "contrib")
           
+          shapContrib <- shap_raw[, -ncol(shap_raw), drop = FALSE]
+          meanSHAP <- sort(colMeans(abs(shapContrib)), decreasing = TRUE)
+          
+          shap_values <- list(
+            shap_score = shapContrib,
+            mean_shap_score = meanSHAP
+          )
           if (calcThresh) {
             SHAPthresh <- quantile(meanSHAP, prob = SHAPthresh)
             calcThresh <- FALSE ## we only calculate the threshold once
@@ -436,13 +445,23 @@ runXGBOOST <- function(dat, dig, nFolds = 5, colnamesResp = "height_p90", eval_m
         }
         
         ## more outputs
+        # shapContrib <- shap_values$shap_score
+        # shapContrib <- shapContrib[, -"(Intercept)"]
+        # shap_long <- shap.prep(shap_contrib = shapContrib, X_train = datPreds) |>
+        #   Cache(omitArgs = formalArgs(shap.prep),
+        #         .functionName = .functionNameHelper("shap.prep", kFold),
+        #         .cacheExtra = c(dig, dig2, cols2keep))
         shapContrib <- shap_values$shap_score
-        shapContrib <- shapContrib[, -"(Intercept)"]
-        shap_long <- shap.prep(shap_contrib = shapContrib, X_train = datPreds) |>
-          Cache(omitArgs = formalArgs(shap.prep),
-                .functionName = .functionNameHelper("shap.prep", kFold),
-                .cacheExtra = c(dig, dig2, cols2keep))
         
+        shap_long <- shap.prep(
+          shap_contrib = as.data.frame(shapContrib),
+          X_train = as.data.frame(datPreds)
+        ) |>
+          Cache(
+            omitArgs = formalArgs(shap.prep),
+            .functionName = .functionNameHelper("shap.prep", kFold),
+            .cacheExtra = c(dig, dig2, cols2keep, "nativeSHAP")
+          )
         ## NEW ADDITION SHAP PLOT START
         
         # Common Plot directory
@@ -657,13 +676,29 @@ runXGBOOST <- function(dat, dig, nFolds = 5, colnamesResp = "height_p90", eval_m
   )
   
   ## ---- SHAP for final model ----
-  final_shap_values <- shap.values(final_mod, datPreds)
-  final_shap_contrib <- final_shap_values$shap_score
-  final_shap_contrib <- final_shap_contrib[, -"(Intercept)"]
+  # final_shap_values <- shap.values(final_mod, datPreds)
+  # final_shap_contrib <- final_shap_values$shap_score
+  # final_shap_contrib <- final_shap_contrib[, -"(Intercept)"]
+  final_shap_raw <- predict(
+    final_mod,
+    as.matrix(datPreds),
+    type = "contrib"
+  )
   
+  final_shap_contrib <- final_shap_raw[
+    , -ncol(final_shap_raw), drop = FALSE
+  ]
+  
+  final_shap_values <- list(
+    shap_score = final_shap_contrib,
+    mean_shap_score = sort(
+      colMeans(abs(final_shap_contrib)),
+      decreasing = TRUE
+    )
+  )
   final_shap_long <- shap.prep(
-    shap_contrib = final_shap_contrib,
-    X_train = datPreds
+    shap_contrib = as.data.frame(final_shap_contrib),
+    X_train = as.data.frame(datPreds)
   )
   
   final_shap_plot <- shap.plot.summary(final_shap_long, scientific = FALSE)

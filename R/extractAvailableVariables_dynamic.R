@@ -345,7 +345,7 @@ extractAvailableVariables_dynamic <- function(outSim) {
     
     final <- dplyr::bind_rows(final, climate_proj)
   }
-  browser()
+  #browser()
 ### CHANGE FOR DORMANCY
   
   ## Keep Translator-generated variables relevant to the current event.
