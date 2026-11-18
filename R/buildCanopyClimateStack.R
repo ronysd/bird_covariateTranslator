@@ -7,7 +7,7 @@ buildCanopyClimateStack <- function(
     canopy_predictors,
     varmetaTable
 ) {
-browser()  
+#browser()  
   climate_vars <- canopy_predictors[
     !grepl("^ECOPROVINC", canopy_predictors) &
       !canopy_predictors %in% c("stand_age", "biomass", "broadleaf_prop")
