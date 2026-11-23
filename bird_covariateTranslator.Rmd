@@ -50,6 +50,23 @@ Provide a brief summary of what the module does / how to use the module.
 Module documentation should be written so that others can use your module.
 This is a template for module documentation, and should be changed to reflect your module.
 
+### Canopy-model cache reuse
+
+Height and closure fits retain their original direct Cache calls, including
+the diagnostic figure paths in the cache keys. Figures stay under
+outputs/figs/xgb_height and outputs/figs/xgb_closure beside the shared project
+cache, regardless of ELF/replicate prediction output paths. Training data,
+predictors, response, folds, seed and the trainer function still determine reuse.
+No custom wrapper, hard-coded hashes or cache migration is used. Changed inputs,
+trainer or cache root can require training. As before, the trainer cache does
+not independently track the source of every nested training helper.
+
+These are canopy-translation models, not the fitted BAM bird-abundance models.
+Cache hits do not recreate diagnostic figures in another output directory.
+Restart an interrupted replay with freshly loaded module code; existing running
+simulations retain their old function definitions. See README.md for the focused
+no-training regression command.
+
 ### Module inputs and parameters
 
 Describe input data required by the module and how to obtain it (e.g., directly from online sources or supplied by other modules)

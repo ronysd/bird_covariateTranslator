@@ -93,7 +93,6 @@ runXGBOOST <- function(dat, dig, nFolds = 5, colnamesResp = "height_p90", eval_m
   ## NEW ADDITION END
   
   colnamesPred <- setdiff(colnames(dat_noID), colnamesResp) ## after model.matrix bcs colnames change #dat_noID
-  browser()
   ## excluding X and Y
   colnamesPred <- setdiff(colnamesPred, c("X", "Y"))
   

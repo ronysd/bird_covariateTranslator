@@ -11,7 +11,7 @@ defineModule(sim, list(
   keywords = c("dynamic covariates", "bird modeling"),
   authors = structure(list(list(given = c("Sourav", ""), family = "Das", role = c("aut", "cre"), email = "souravdron@gmail.com", comment = NULL)), class = "person"),
   childModules = character(0),
-  version = list(bird_covariateTranslator = "0.0.0.9000"),
+  version = list(bird_covariateTranslator = "0.0.1.9000"),
   timeframe = as.POSIXlt(c(NA, NA)),
   timeunit = "year",
   citation = list("citation.bib"),
@@ -291,24 +291,27 @@ if (P(sim)$cohortDataSource == "simulation") {
     corr_cutoff = corrCutoff
   )
   
-  message("Training XGBoost height model...")
+  # Retain the original shared figure paths because figDir is part of the cache key.
+  message("Loading or training XGBoost height model...")
   sim$height_xgb <- Cache(
     trainCanopyXGB,
     model_data = sim$canopyModelData,
     response   = "height_p90",
     predictors = height_feat$predictors,
     nFolds     = canopyXFolds,
-    figDir     = file.path(outputPath(sim), "figs", "xgb_height")
+    cachePath  = cachePath(sim),
+    figDir     = file.path(dirname(cachePath(sim)), "outputs", "figs", "xgb_height")
   )
   
-  message("Training XGBoost closure model...")
+  message("Loading or training XGBoost closure model...")
   sim$closure_xgb <- Cache(
     trainCanopyXGB,
     model_data = sim$canopyModelData,
     response   = "closure",
     predictors = closure_feat$predictors,
     nFolds     = canopyXFolds,
-    figDir     = file.path(outputPath(sim), "figs", "xgb_closure")
+    cachePath  = cachePath(sim),
+    figDir     = file.path(dirname(cachePath(sim)), "outputs", "figs", "xgb_closure")
   )
   
   sim$canopyModels <- list(
